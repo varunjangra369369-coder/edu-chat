@@ -43,7 +43,7 @@ db = {
 }
 
 LAST_SYNC_TIME = 0
-SYNC_COOLDOWN = 10 # 10 seconds between automatic syncs
+SYNC_COOLDOWN = 15 
 
 def save_sheet(sheet_name, headers, rows):
     if not USE_SHEETS: return
@@ -61,7 +61,7 @@ def save_sheet(sheet_name, headers, rows):
         print(f"Failed to sync to {sheet_name}: {e}")
 
 def append_sheet_row(sheet_name, row):
-    """ ATOMIC APPEND - Prevents concurrent user overwrites """
+    """ Atomic append to safely handle multiple users messaging at the same time """
     if not USE_SHEETS: return
     try:
         sheet = google_sheet.worksheet(sheet_name)
@@ -82,7 +82,6 @@ def save_teachers():
     save_sheet('Teachers', ['t_id', 'school_id', 'username', 'password_hash', 'subject', 'is_admin', 'is_approved', 'active_day'], rows)
 
 def save_messages():
-    """ Used only for mass updates (deletions/pinning). Sending uses append_sheet_row. """
     rows = [[m['id'], m['school_id'], m['class_id'], m['teacher_id'], m['student_id'], m['text'], str(m['is_top']), m['day_id'], m['timestamp'], m['iso_time']] for m in db["messages"]]
     save_sheet('Messages', ['id', 'school_id', 'class_id', 'teacher_id', 'student_id', 'text', 'is_top', 'day_id', 'timestamp', 'iso_time'], rows)
 
@@ -151,48 +150,40 @@ BASE_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>EduPortal Pro</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <style>
-        :root { --primary: #4f46e5; --secondary: #10b981; --dark: #0f172a; --light: #f1f5f9; }
-        body { background-color: var(--light); font-family: 'Inter', sans-serif; padding-top: 15px; padding-bottom: 50px; }
-        
-        /* Navbar & Navigations */
-        .navbar { background: linear-gradient(135deg, var(--primary), #3730a3); border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .navbar-brand { font-weight: 800; color: white !important; font-size: 1.5rem; letter-spacing: -0.5px; }
+        :root { --primary: #4f46e5; --secondary: #10b981; --dark: #1e293b; --light: #f8fafc; --danger: #ef4444; }
+        body { background-color: var(--light); font-family: 'Segoe UI', system-ui, sans-serif; padding-top: 15px; padding-bottom: 40px; }
+        .navbar { background: linear-gradient(135deg, var(--primary), #3730a3); border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .navbar-brand { font-weight: 800; color: white !important; font-size: 1.4rem; }
         .nav-btn { font-weight: 600; border-radius: 8px; margin-left: 8px; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); background: white; }
+        .form-control, .form-select { border-radius: 8px; padding: 0.75rem 1rem; }
+        .btn { border-radius: 8px; font-weight: 600; padding: 0.6rem 1.2rem; }
         
-        /* Cards & UI Elements */
-        .card { border: none; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background: white; transition: transform 0.2s; }
-        .form-control, .form-select { border-radius: 10px; padding: 0.8rem 1rem; border: 1px solid #cbd5e1; }
-        .form-control:focus, .form-select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1); }
-        .btn { border-radius: 10px; font-weight: 600; padding: 0.7rem 1.2rem; transition: all 0.2s; }
-        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        
-        /* Message Box Universal Sizing & Text Wrap */
-        .msg-box { background: white; padding: 1.2rem; border-radius: 12px; border-left: 5px solid var(--primary); margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); word-wrap: break-word; overflow-wrap: break-word; }
+        /* Fixed Message Box for Mobile/Desktop Overflow */
+        .msg-box { background: white; padding: 1rem; border-radius: 8px; border-left: 5px solid var(--primary); margin-bottom: 1rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); word-wrap: break-word; overflow-wrap: break-word; }
+        .msg-box .w-100 { min-width: 0; } 
+        .msg-text { white-space: pre-wrap; margin-bottom: 0.5rem; word-break: break-word; color: #1e293b; }
         .msg-top { border-left: 5px solid #f59e0b; background: #fffbeb; }
-        .msg-text { white-space: pre-wrap; margin-bottom: 0.5rem; color: #1e293b; font-size: 1.1rem; line-height: 1.5; }
         
-        /* Mobile Specific Overrides */
+        .nav-tabs .nav-link { font-weight: 600; color: #64748b; }
+        .nav-tabs .nav-link.active { color: var(--primary); border-bottom: 3px solid var(--primary); }
+
         @media (max-width: 768px) {
-            .nav-btn { margin-left: 0; margin-bottom: 10px; display: block; width: 100%; text-align: center; }
-            .btn-mobile-full { width: 100% !important; margin-bottom: 0.5rem; }
-            .msg-actions { width: 100%; display: flex; gap: 0.5rem; flex-direction: column; mt-3 }
-            h1 { font-size: 1.8rem; }
+            .nav-btn { margin-left: 0; margin-bottom: 8px; display: block; text-align: center; }
         }
     </style>
     <script>
+        // Exact Local Time Converter
         document.addEventListener("DOMContentLoaded", function() {
-            // Converts UTC exactly to user's local timezone & preferred format
             document.querySelectorAll('.local-time').forEach(el => {
                 let iso = el.getAttribute('data-iso');
                 if(iso) {
-                    let date = new Date(iso);
-                    let options = { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' };
-                    el.innerHTML = '<i class="fa-regular fa-clock me-1"></i>' + date.toLocaleDateString(undefined, options);
+                    let date = new Date(iso); // "Z" in iso guarantees UTC to Local conversion
+                    el.innerText = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true});
                 }
             });
         });
@@ -205,15 +196,15 @@ BASE_HTML = """
                 <a class="navbar-brand" href="/"><i class="fa-solid fa-graduation-cap me-2"></i>EduPortal</a>
                 <button class="navbar-toggler border-0 shadow-none text-white" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu"><i class="fa-solid fa-bars fa-lg"></i></button>
                 <div class="collapse navbar-collapse justify-content-end mt-3 mt-lg-0" id="navMenu">
-                    <a href="/legend" class="btn btn-warning nav-btn text-dark"><i class="fa-solid fa-star me-1"></i>Legend Board</a>
+                    <a href="/legend" class="btn btn-warning nav-btn text-dark mb-2 mb-lg-0"><i class="fa-solid fa-star me-1"></i>Legend Board</a>
                     {% if session.get('teacher_id') %}
                         {% if session.get('is_admin') %}
-                            <a href="/admin_dashboard" class="btn btn-dark nav-btn"><i class="fa-solid fa-gear me-1"></i>Admin</a>
+                            <a href="/admin_dashboard" class="btn btn-dark nav-btn mb-2 mb-lg-0"><i class="fa-solid fa-gear me-1"></i>Admin</a>
                         {% endif %}
-                        <a href="/teacher_dashboard" class="btn btn-light nav-btn"><i class="fa-solid fa-chalkboard-user me-1"></i>Dashboard</a>
+                        <a href="/teacher_dashboard" class="btn btn-light nav-btn mb-2 mb-lg-0"><i class="fa-solid fa-chalkboard-user me-1"></i>Dashboard</a>
                         <a href="/logout" class="btn btn-danger nav-btn"><i class="fa-solid fa-right-from-bracket"></i></a>
                     {% elif session.get('student_class_id') %}
-                        <a href="/student_portal" class="btn btn-light nav-btn"><i class="fa-solid fa-paper-plane me-1"></i>Portal</a>
+                        <a href="/student_portal" class="btn btn-light nav-btn mb-2 mb-lg-0"><i class="fa-solid fa-paper-plane me-1"></i>Portal</a>
                         <a href="/logout" class="btn btn-danger nav-btn"><i class="fa-solid fa-right-from-bracket"></i> Exit</a>
                     {% endif %}
                 </div>
@@ -223,9 +214,8 @@ BASE_HTML = """
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}
-              <div class="alert alert-{{ 'success' if category == 'message' else category }} alert-dismissible fade show rounded-4 shadow-sm border-0">
-                <span class="fw-bold">{{ message }}</span>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+              <div class="alert alert-{{ 'success' if category == 'message' else category }} alert-dismissible fade show rounded-3 shadow-sm">
+                {{ message }} <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
               </div>
             {% endfor %}
           {% endif %}
@@ -238,169 +228,127 @@ BASE_HTML = """
 """
 
 INDEX_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
-<div class="row text-center mt-2 mt-md-4 px-2">
-    <div class="col-12 mb-4 mb-md-5"><h1 class="fw-bold text-dark">School Communication Portal</h1><p class="text-muted fs-5">Fast, secure, and organized messaging.</p></div>
-    <div class="col-md-4 mb-4"><div class="card h-100 p-4 p-md-5 border-top border-4 border-primary">
+<div class="row text-center mt-4">
+    <div class="col-12 mb-4"><h1 class="fw-bold text-dark">School Communication Portal</h1></div>
+    <div class="col-md-4 mb-4"><div class="card h-100 p-4 border-top border-4 border-primary">
         <i class="fa-solid fa-user-graduate fa-3x text-primary mb-3"></i><h3 class="fw-bold">Students</h3>
-        <p class="text-muted mb-4">Select school & class to safely message your teachers.</p>
-        <a href="/student_auth" class="btn btn-primary w-100 mt-auto btn-lg">Join Class</a>
+        <p class="text-muted mb-4">Select school & class to message teachers.</p>
+        <a href="/student_auth" class="btn btn-primary mt-auto">Join Class</a>
     </div></div>
-    <div class="col-md-4 mb-4"><div class="card h-100 p-4 p-md-5 border-top border-4 border-success">
+    <div class="col-md-4 mb-4"><div class="card h-100 p-4 border-top border-4 border-success">
         <i class="fa-solid fa-chalkboard-teacher fa-3x text-success mb-3"></i><h3 class="fw-bold">Teachers</h3>
-        <p class="text-muted mb-4">Login to view student messages and pin important notes.</p>
-        <a href="/teacher_login" class="btn btn-success w-100 mt-auto btn-lg">Teacher Portal</a>
+        <p class="text-muted mb-4">Login to view student messages.</p>
+        <a href="/teacher_login" class="btn btn-success mt-auto">Teacher Portal</a>
     </div></div>
-    <div class="col-md-4 mb-4"><div class="card h-100 p-4 p-md-5 border-top border-4 border-dark">
+    <div class="col-md-4 mb-4"><div class="card h-100 p-4 border-top border-4 border-dark">
         <i class="fa-solid fa-building-columns fa-3x text-dark mb-3"></i><h3 class="fw-bold">Admin</h3>
-        <p class="text-muted mb-4">Register your school portal and manage staff efficiently.</p>
-        <a href="/create_school" class="btn btn-dark w-100 mt-auto btn-lg">Create School</a>
+        <p class="text-muted mb-4">Register your school portal.</p>
+        <a href="/create_school" class="btn btn-dark mt-auto">Create School</a>
     </div></div>
 </div>
 """)
 
 CREATE_SCHOOL_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
-<div class="row justify-content-center px-2"><div class="col-md-7 col-lg-5"><div class="card p-4 p-md-5 border-top border-4 border-dark">
+<div class="row justify-content-center"><div class="col-md-6"><div class="card p-4">
     <h3 class="text-center fw-bold mb-4">Register New School</h3>
     <form action="/create_school" method="POST" autocomplete="off">
-        <div class="form-floating mb-4">
-            <input type="text" name="school_name" class="form-control" id="schoolName" placeholder="School Name" required>
-            <label for="schoolName">School Name</label>
-        </div>
-        <hr class="mb-4 text-muted">
-        <h5 class="fw-bold text-primary mb-3">Admin Account Setup</h5>
-        <div class="form-floating mb-3">
-            <input type="text" name="username" class="form-control" id="adminUser" placeholder="Username" autocomplete="off" required>
-            <label for="adminUser">Admin Username</label>
-        </div>
-        <div class="form-floating mb-3">
-            <input type="text" name="subject" class="form-control" id="adminRole" placeholder="Role" required>
-            <label for="adminRole">Subject / Role</label>
-        </div>
-        <div class="form-floating mb-4">
-            <input type="password" name="password" class="form-control" id="adminPw" placeholder="Password" autocomplete="new-password" required minlength="6">
-            <label for="adminPw">Password</label>
-        </div>
+        <div class="mb-3"><label class="form-label fw-bold">School Name</label><input type="text" name="school_name" class="form-control" required></div>
+        <hr>
+        <h5 class="fw-bold text-primary mb-3">Admin Account Details</h5>
+        <div class="mb-3"><label class="form-label">Username</label><input type="text" name="username" class="form-control" autocomplete="off" required></div>
+        <div class="mb-3"><label class="form-label">Subject / Role</label><input type="text" name="subject" class="form-control" required></div>
+        <div class="mb-4"><label class="form-label">Password</label><input type="password" name="password" class="form-control" autocomplete="new-password" required minlength="6"></div>
         <button type="submit" class="btn btn-dark w-100 btn-lg">Create Portal</button>
     </form>
 </div></div></div>
 """)
 
 TEACHER_LOGIN_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
-<div class="row justify-content-center px-2"><div class="col-md-7 col-lg-5"><div class="card p-4 p-md-5 border-top border-4 border-success">
-    <div class="text-center mb-4">
-        <i class="fa-solid fa-chalkboard-user fa-3x text-success mb-3"></i>
-        <h3 class="fw-bold">Teacher Login</h3>
-    </div>
+<div class="row justify-content-center"><div class="col-md-5"><div class="card p-4 shadow-sm">
+    <h3 class="text-center fw-bold mb-4 text-success">Teacher Login</h3>
     <form action="/teacher_login" method="POST">
-        <div class="form-floating mb-3">
-            <select name="school_id" class="form-select" id="schoolSelect" required>
-                <option value="" disabled selected>Select your school</option>
+        <div class="mb-3"><label class="form-label fw-bold small">School</label>
+            <select name="school_id" class="form-select" required>
                 {% for s_id, s_info in schools.items() %}<option value="{{ s_id }}">{{ s_info.name }}</option>{% endfor %}
             </select>
-            <label for="schoolSelect">School</label>
         </div>
-        <div class="form-floating mb-3">
-            <input type="text" name="username" class="form-control" id="username" placeholder="Username" required autocomplete="username">
-            <label for="username">Username</label>
-        </div>
-        <div class="form-floating mb-4">
-            <input type="password" name="password" class="form-control" id="password" placeholder="Password" required autocomplete="current-password">
-            <label for="password">Password</label>
-        </div>
-        <button type="submit" class="btn btn-success w-100 btn-lg fw-bold">Login to Dashboard</button>
+        <div class="mb-3"><label class="form-label fw-bold small">Username</label><input type="text" name="username" class="form-control" required autocomplete="username"></div>
+        <div class="mb-4"><label class="form-label fw-bold small">Password</label><input type="password" name="password" class="form-control" required autocomplete="current-password"></div>
+        <button type="submit" class="btn btn-success w-100 btn-lg shadow-sm">Login</button>
     </form>
     
-    <div class="mt-4 pt-4 border-top text-center">
-        <p class="text-muted small mb-3">Don't have an account?</p>
-        <button class="btn btn-outline-primary w-100 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#registerModal">Register as New Teacher</button>
+    <div class="mt-4 pt-3 border-top text-center" id="regToggleBtn">
+        <button class="btn btn-outline-primary w-100" onclick="document.getElementById('regForm').style.display='block'; this.parentNode.style.display='none';">Register as New Teacher</button>
     </div>
+    
+    <!-- Professional Inline Registration Form -->
+    <form action="/teacher_register" method="POST" id="regForm" style="display:none;" class="mt-4 bg-white border border-primary p-4 rounded shadow-sm" autocomplete="off">
+        <h5 class="fw-bold mb-3 text-primary border-bottom pb-2"><i class="fa-solid fa-user-plus me-2"></i>New Teacher Registration</h5>
+        <p class="small text-muted mb-3"><i class="fa-solid fa-circle-info"></i> Requires Admin approval to log in.</p>
+        
+        <div class="mb-2"><label class="form-label fw-bold small">Select School</label>
+            <select name="school_id" class="form-select" required>{% for s_id, s_info in schools.items() %}<option value="{{ s_id }}">{{ s_info.name }}</option>{% endfor %}</select>
+        </div>
+        <div class="mb-2"><label class="form-label fw-bold small">Username</label>
+            <input type="text" name="username" class="form-control" placeholder="e.g. Mr. Smith" autocomplete="off" required>
+        </div>
+        <div class="mb-2"><label class="form-label fw-bold small">Subject</label>
+            <input type="text" name="subject" class="form-control" placeholder="e.g. Math" required>
+        </div>
+        <div class="mb-4"><label class="form-label fw-bold small">Password</label>
+            <input type="password" name="password" class="form-control" placeholder="Min 6 characters" required minlength="6" autocomplete="new-password">
+        </div>
+        <div class="d-flex flex-column flex-md-row gap-2">
+            <button type="submit" class="btn btn-primary w-100 fw-bold">Submit</button>
+            <button type="button" class="btn btn-secondary w-100 fw-bold" onclick="document.getElementById('regForm').style.display='none'; document.getElementById('regToggleBtn').style.display='block';">Cancel</button>
+        </div>
+    </form>
 </div></div></div>
-
-<!-- Premium Registration Modal -->
-<div class="modal fade" id="registerModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 rounded-4 shadow-lg">
-      <div class="modal-header bg-primary text-white rounded-top-4 border-0">
-        <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-plus me-2"></i>Teacher Registration</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body p-4 p-md-5">
-        <div class="alert alert-info py-2 small fw-bold mb-4"><i class="fa-solid fa-shield-halved me-1"></i> Admin approval is required after registration.</div>
-        <form action="/teacher_register" method="POST" autocomplete="off">
-            <div class="form-floating mb-3">
-                <select name="school_id" class="form-select" id="regSchool" required>
-                    <option value="" disabled selected>Select School</option>
-                    {% for s_id, s_info in schools.items() %}<option value="{{ s_id }}">{{ s_info.name }}</option>{% endfor %}
-                </select>
-                <label for="regSchool">School</label>
-            </div>
-            <div class="form-floating mb-3">
-                <input type="text" name="username" class="form-control" id="regUser" placeholder="e.g. Mr. Smith" autocomplete="off" required>
-                <label for="regUser">Username</label>
-            </div>
-            <div class="form-floating mb-3">
-                <input type="text" name="subject" class="form-control" id="regSubj" placeholder="e.g. Math" required>
-                <label for="regSubj">Subject / Department</label>
-            </div>
-            <div class="form-floating mb-4">
-                <input type="password" name="password" class="form-control" id="regPw" placeholder="Min 6 characters" required minlength="6" autocomplete="new-password">
-                <label for="regPw">Password</label>
-            </div>
-            <div class="d-flex gap-2">
-                <button type="button" class="btn btn-light border flex-fill" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary flex-fill fw-bold shadow-sm">Submit Request</button>
-            </div>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
 """)
 
 ADMIN_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
-<div class="card p-3 p-md-4 mb-4 bg-dark text-white border-0 shadow">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-        <h2 class="fw-bold m-0 fs-3"><i class="fa-solid fa-shield-halved text-warning me-2"></i>Admin Panel</h2>
-        <span class="badge bg-light text-dark fs-6">{{ school.name }}</span>
+<div class="card p-4 mb-4 bg-dark text-white border-0 shadow">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+        <h2 class="fw-bold m-0"><i class="fa-solid fa-shield-halved text-warning me-2"></i>Admin Panel - {{ school.name }}</h2>
     </div>
 </div>
 
-<ul class="nav nav-tabs mb-4 border-0 flex-nowrap overflow-auto hide-scrollbar" id="adminTabs" role="tablist">
-  <li class="nav-item"><button class="nav-link active btn btn-light me-2 fw-bold rounded shadow-sm text-nowrap" data-bs-toggle="tab" data-bs-target="#classes">Classes</button></li>
-  <li class="nav-item"><button class="nav-link btn btn-light me-2 fw-bold rounded shadow-sm text-nowrap" data-bs-toggle="tab" data-bs-target="#teachers">Teachers</button></li>
-  <li class="nav-item"><button class="nav-link btn btn-light fw-bold rounded shadow-sm text-nowrap" data-bs-toggle="tab" data-bs-target="#settings">Settings</button></li>
+<ul class="nav nav-tabs mb-4 border-0" id="adminTabs" role="tablist">
+  <li class="nav-item"><button class="nav-link active btn btn-light me-2 fw-bold rounded shadow-sm" data-bs-toggle="tab" data-bs-target="#classes">Classes</button></li>
+  <li class="nav-item"><button class="nav-link btn btn-light me-2 fw-bold rounded shadow-sm" data-bs-toggle="tab" data-bs-target="#teachers">Teachers</button></li>
+  <li class="nav-item"><button class="nav-link btn btn-light fw-bold rounded shadow-sm" data-bs-toggle="tab" data-bs-target="#settings">Settings & Danger Zone</button></li>
 </ul>
 
 <div class="tab-content">
     <div class="tab-pane fade show active" id="classes">
         <div class="row">
-            <div class="col-xl-4 mb-4">
+            <div class="col-md-4 mb-4">
                 <div class="card p-4 border-top border-4 border-primary">
                     <h5 class="fw-bold mb-3">Add New Class</h5>
                     <form action="/admin/add_class" method="POST" autocomplete="off">
-                        <input type="text" name="class_name" class="form-control mb-3" required placeholder="Class Name (e.g. 10th Grade)">
-                        <input type="text" name="class_password" class="form-control mb-4" required placeholder="Entry Password" autocomplete="new-password">
+                        <input type="text" name="class_name" class="form-control mb-2" required placeholder="Class Name">
+                        <input type="text" name="class_password" class="form-control mb-3" required placeholder="Entry Password" autocomplete="new-password">
                         <button class="btn btn-primary w-100 fw-bold">Create Class</button>
                     </form>
                 </div>
             </div>
-            <div class="col-xl-8 mb-4">
+            <div class="col-md-8 mb-4">
                 <div class="card p-4">
                     <h5 class="fw-bold mb-3">Manage Classes</h5>
                     {% for c_id, c_info in classes.items() %}
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center p-3 border rounded-3 mb-3 bg-light gap-3">
-                        <span class="fw-bold fs-5 text-dark"><i class="fa-solid fa-users text-primary me-2"></i>{{ c_info.name }}</span>
-                        <div class="d-flex flex-column flex-md-row gap-2 w-100 w-md-auto">
-                            <form action="/admin/change_class_pw/{{ c_id }}" method="POST" class="d-flex m-0 flex-grow-1">
+                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center p-3 border rounded mb-2 bg-light gap-2">
+                        <span class="fw-bold fs-5 w-100"><i class="fa-solid fa-users text-primary me-2"></i>{{ c_info.name }}</span>
+                        <div class="d-flex flex-column flex-md-row w-100 gap-2">
+                            <form action="/admin/change_class_pw/{{ c_id }}" method="POST" class="d-flex m-0 w-100">
                                 <input type="text" name="new_password" class="form-control form-control-sm me-2" placeholder="New Password" required autocomplete="new-password">
                                 <button class="btn btn-sm btn-dark fw-bold text-nowrap">Change PW</button>
                             </form>
-                            <form action="/admin/delete_class/{{ c_id }}" method="POST" class="m-0" onsubmit="return confirm('Delete this class entirely?');">
-                                <button class="btn btn-sm btn-danger fw-bold w-100"><i class="fa-solid fa-trash me-md-1"></i><span class="d-inline d-md-none"> Delete</span></button>
+                            <form action="/admin/delete_class/{{ c_id }}" method="POST" class="m-0 w-100 w-md-auto" onsubmit="return confirm('Delete this class entirely?');">
+                                <button class="btn btn-sm btn-danger fw-bold w-100"><i class="fa-solid fa-trash me-1"></i>Delete</button>
                             </form>
                         </div>
                     </div>
-                    {% else %}<div class="alert alert-light text-center border text-muted py-4">No classes created yet.</div>{% endfor %}
+                    {% else %}<p class="text-muted">No classes created.</p>{% endfor %}
                 </div>
             </div>
         </div>
@@ -408,44 +356,44 @@ ADMIN_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
 
     <div class="tab-pane fade" id="teachers">
         <div class="row">
-            <div class="col-12 mb-4">
+            <div class="col-md-12 mb-4">
                 <div class="card p-4 border-top border-4 border-warning shadow-sm">
-                    <h5 class="fw-bold mb-3 text-warning"><i class="fa-solid fa-clock-rotate-left me-2"></i>Pending Approvals</h5>
+                    <h5 class="fw-bold mb-3 text-warning">Pending Approvals</h5>
                     {% for t_id, t_info in pending_teachers.items() %}
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center p-3 border rounded mb-2 bg-white gap-3">
-                        <span><b class="fs-5">{{ t_info.username }}</b> <span class="badge bg-light text-dark ms-2">{{ t_info.subject }}</span></span>
-                        <div class="d-flex gap-2 w-100 w-md-auto">
-                            <form action="/admin/action_teacher/{{ t_id }}/approve" method="POST" class="m-0 flex-fill"><button class="btn btn-success w-100 fw-bold shadow-sm">Approve</button></form>
-                            <form action="/admin/action_teacher/{{ t_id }}/reject" method="POST" class="m-0 flex-fill"><button class="btn btn-danger w-100 fw-bold shadow-sm">Reject</button></form>
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center p-3 border rounded mb-2 bg-white gap-2">
+                        <span><b class="fs-5">{{ t_info.username }}</b> ({{ t_info.subject }})</span>
+                        <div class="d-flex flex-row gap-2 w-100 w-md-auto">
+                            <form action="/admin/action_teacher/{{ t_id }}/approve" method="POST" class="m-0 flex-fill"><button class="btn btn-success btn-sm fw-bold w-100">Approve</button></form>
+                            <form action="/admin/action_teacher/{{ t_id }}/reject" method="POST" class="m-0 flex-fill"><button class="btn btn-danger btn-sm fw-bold w-100">Reject</button></form>
                         </div>
                     </div>
-                    {% else %}<p class="text-muted m-0 small">No pending requests.</p>{% endfor %}
+                    {% else %}<p class="text-muted m-0">No pending requests.</p>{% endfor %}
                 </div>
             </div>
-            <div class="col-12">
-                <div class="card p-4 shadow-sm">
-                    <h5 class="fw-bold mb-3">Approved Staff</h5>
+            <div class="col-md-12">
+                <div class="card p-4 shadow-sm overflow-auto">
+                    <h5 class="fw-bold mb-3">Approved Teachers</h5>
                     <div class="table-responsive">
-                    <table class="table table-hover align-middle m-0">
-                        <thead class="table-light"><tr><th>Staff Member</th><th>Subject</th><th>Role</th><th class="text-end">Actions</th></tr></thead>
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light"><tr><th>Username</th><th>Subject</th><th>Role</th><th>Actions</th></tr></thead>
                         <tbody>
                             {% for t_id, t_info in approved_teachers.items() %}
                             <tr>
-                                <td class="fw-bold text-nowrap">{{ t_info.username }}</td>
+                                <td class="fw-bold">{{ t_info.username }}</td>
                                 <td>{{ t_info.subject }}</td>
                                 <td>{% if t_info.is_admin %}<span class="badge bg-dark">Admin</span>{% else %}<span class="badge bg-secondary">Teacher</span>{% endif %}</td>
-                                <td class="text-end">
+                                <td>
                                     {% if t_id != session['teacher_id'] %}
-                                        <div class="d-flex gap-1 justify-content-end flex-wrap">
-                                        <form action="/admin/action_teacher/{{ t_id }}/toggle_admin" method="POST" class="m-0">
-                                            <button class="btn btn-sm {% if t_info.is_admin %}btn-warning{% else %}btn-dark{% endif %} text-nowrap fw-bold shadow-sm">{% if t_info.is_admin %}Revoke Admin{% else %}Make Admin{% endif %}</button>
-                                        </form>
-                                        <form action="/admin/action_teacher/{{ t_id }}/remove" method="POST" class="m-0" onsubmit="return confirm('Remove this teacher?');">
-                                            <button class="btn btn-sm btn-danger shadow-sm"><i class="fa-solid fa-user-xmark"></i></button>
-                                        </form>
+                                        <div class="d-flex gap-1">
+                                            <form action="/admin/action_teacher/{{ t_id }}/toggle_admin" method="POST" class="m-0">
+                                                <button class="btn btn-sm {% if t_info.is_admin %}btn-warning{% else %}btn-dark{% endif %} text-nowrap">{% if t_info.is_admin %}Revoke Admin{% else %}Make Admin{% endif %}</button>
+                                            </form>
+                                            <form action="/admin/action_teacher/{{ t_id }}/remove" method="POST" class="m-0" onsubmit="return confirm('Remove this teacher?');">
+                                                <button class="btn btn-sm btn-danger"><i class="fa-solid fa-user-xmark"></i></button>
+                                            </form>
                                         </div>
                                     {% else %}
-                                        <span class="badge border border-dark text-dark px-3 py-2">You</span>
+                                        <span class="text-muted small fw-bold">You (Current User)</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -459,26 +407,27 @@ ADMIN_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
 
     <div class="tab-pane fade" id="settings">
         <div class="row">
-            <div class="col-lg-6 mb-4">
+            <div class="col-md-6 mb-4">
                 <div class="card p-4 border-top border-4 border-dark">
                     <h5 class="fw-bold mb-3">My Admin Account</h5>
                     <form action="/admin/change_password" method="POST" autocomplete="off">
-                        <input type="password" name="new_password" class="form-control mb-3" required placeholder="New Password" minlength="6" autocomplete="new-password">
-                        <button class="btn btn-dark w-100 mb-4 fw-bold shadow-sm">Update My Password</button>
+                        <input type="password" name="new_password" class="form-control mb-2" required placeholder="New Password" minlength="6" autocomplete="new-password">
+                        <button class="btn btn-dark w-100 mb-3 fw-bold">Update My Password</button>
                     </form>
+                    <hr>
                     <form action="/admin/resign" method="POST" onsubmit="return confirm('Are you sure you want to step down as Admin?');">
                         <button class="btn btn-outline-warning text-dark w-100 fw-bold">Resign from Admin Role</button>
                     </form>
                 </div>
             </div>
-            <div class="col-lg-6 mb-4">
+            <div class="col-md-6 mb-4">
                 <div class="card p-4 border border-danger bg-light">
-                    <h5 class="fw-bold text-danger mb-2"><i class="fa-solid fa-triangle-exclamation me-2"></i>Danger Zone</h5>
-                    <p class="text-muted small mb-4">Deleting the school removes ALL classes, teachers, and messages permanently.</p>
+                    <h5 class="fw-bold text-danger mb-3"><i class="fa-solid fa-triangle-exclamation me-2"></i>Danger Zone</h5>
+                    <p class="text-muted small">Deleting the school removes ALL classes, teachers, and messages permanently.</p>
                     <form action="/admin/delete_school" method="POST">
-                        <label class="small fw-bold mb-2 text-dark">Type <code class="fs-6 px-2 py-1 bg-white border rounded text-danger">confirm delete {{ school.name }}</code> below:</label>
+                        <label class="small fw-bold mb-1">Type <code>confirm delete {{ school.name }}</code> below:</label>
                         <input type="text" name="confirm_text" class="form-control border-danger mb-3" required autocomplete="off">
-                        <button class="btn btn-danger w-100 fw-bold shadow-sm"><i class="fa-solid fa-radiation me-2"></i>Permanently Delete School</button>
+                        <button class="btn btn-danger w-100 fw-bold"><i class="fa-solid fa-radiation me-2"></i>Permanently Delete School</button>
                     </form>
                 </div>
             </div>
@@ -488,193 +437,164 @@ ADMIN_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
 """)
 
 STUDENT_AUTH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
-<div class="row justify-content-center px-2"><div class="col-md-7 col-lg-5"><div class="card p-4 p-md-5 border-top border-4 border-primary">
-    <div class="text-center mb-4">
-        <i class="fa-solid fa-user-graduate fa-3x text-primary mb-3"></i>
-        <h3 class="fw-bold">Student Access</h3>
-    </div>
+<div class="row justify-content-center"><div class="col-md-5"><div class="card p-4">
+    <h3 class="text-center fw-bold mb-4 text-primary">Student Access</h3>
     <form action="/student_auth" method="POST">
-        <div class="form-floating mb-3">
-            <select name="school_id" class="form-select fw-bold text-primary" id="selSchool" required onchange="this.form.submit()">
-                <option value="" disabled {% if not selected_school %}selected{% endif %}>1. Choose your school</option>
-                {% for s_id, s_info in schools.items() %}<option value="{{ s_id }}" {% if selected_school == s_id %}selected{% endif %}>{{ s_info.name }}</option>{% endfor %}
-            </select>
-            <label for="selSchool">School</label>
-        </div>
+        <select name="school_id" class="form-select mb-3" required onchange="this.form.submit()">
+            <option value="">-- 1. Select School --</option>
+            {% for s_id, s_info in schools.items() %}<option value="{{ s_id }}" {% if selected_school == s_id %}selected{% endif %}>{{ s_info.name }}</option>{% endfor %}
+        </select>
     </form>
     {% if selected_school %}
-    <form action="/student_login_class" method="POST" class="pt-3 border-top mt-3" autocomplete="off">
+    <form action="/student_login_class" method="POST" class="pt-3 border-top" autocomplete="off">
         <input type="hidden" name="school_id" value="{{ selected_school }}">
-        <div class="form-floating mb-3">
-            <select name="class_id" class="form-select" id="selClass" required>
-                <option value="" disabled selected>2. Choose your class</option>
-                {% for c_id, c_info in classes.items() %}<option value="{{ c_id }}">{{ c_info.name }}</option>{% endfor %}
-            </select>
-            <label for="selClass">Class</label>
-        </div>
-        <div class="form-floating mb-4">
-            <input type="password" name="password" class="form-control" id="classPw" placeholder="3. Class Password" required autocomplete="new-password">
-            <label for="classPw">Class Password</label>
-        </div>
-        <button type="submit" class="btn btn-primary w-100 btn-lg fw-bold shadow-sm">Enter Class Portal</button>
+        <select name="class_id" class="form-select mb-3" required>
+            <option value="">-- 2. Select Class --</option>
+            {% for c_id, c_info in classes.items() %}<option value="{{ c_id }}">{{ c_info.name }}</option>{% endfor %}
+        </select>
+        <input type="password" name="password" class="form-control mb-4" placeholder="3. Class Password" required autocomplete="new-password">
+        <button type="submit" class="btn btn-primary w-100 btn-lg fw-bold">Enter Class</button>
     </form>
     {% endif %}
 </div></div></div>
 """)
 
 STUDENT_PORTAL_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
-<div class="row px-2">
+<div class="row">
     <div class="col-lg-4 mb-4">
         <div class="card p-4 shadow-sm border-top border-4 border-primary sticky-lg-top" style="top: 20px;">
-            <h4 class="fw-bold mb-4"><i class="fa-solid fa-paper-plane text-primary me-2"></i>Send Message</h4>
+            <h4 class="fw-bold mb-3"><i class="fa-solid fa-paper-plane text-primary me-2"></i>Send Message</h4>
             <form action="/send_message" method="POST">
-                <div class="form-floating mb-3">
-                    <select name="teacher_id" class="form-select fw-bold" id="selTeacher" required>
-                        <option value="" disabled selected>Select Teacher</option>
-                        {% for t_id, t_info in teachers.items() %}<option value="{{ t_id }}">{{ t_info.subject }} ({{ t_info.username }})</option>{% endfor %}
-                    </select>
-                    <label for="selTeacher">To</label>
-                </div>
-                <div class="form-floating mb-4">
-                    <textarea name="text" class="form-control" id="msgText" style="height: 120px" required placeholder="Type your question here..."></textarea>
-                    <label for="msgText">Message</label>
-                </div>
-                <button type="submit" class="btn btn-primary w-100 btn-lg fw-bold shadow-sm">Send Message</button>
+                <select name="teacher_id" class="form-select mb-3" required>
+                    <option value="">-- Select Teacher --</option>
+                    {% for t_id, t_info in teachers.items() %}<option value="{{ t_id }}">{{ t_info.subject }} ({{ t_info.username }})</option>{% endfor %}
+                </select>
+                <textarea name="text" class="form-control mb-3" rows="4" required placeholder="Type your question here..."></textarea>
+                <button type="submit" class="btn btn-primary w-100 fw-bold">Send</button>
             </form>
         </div>
     </div>
     <div class="col-lg-8">
-        <div class="card p-3 p-md-4 shadow-sm bg-light border-0">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="fw-bold m-0"><i class="fa-solid fa-clock-rotate-left text-secondary me-2"></i>My Recent Messages</h4>
-            </div>
-            <p class="small text-muted mb-4"><i class="fa-solid fa-circle-info"></i> Messages can be deleted within 5 minutes.</p>
-            
+        <div class="card p-4 shadow-sm bg-light">
+            <h4 class="fw-bold mb-3"><i class="fa-solid fa-clock-rotate-left text-secondary me-2"></i>My Recent Messages</h4>
+            <p class="small text-muted mb-4"><i class="fa-solid fa-circle-info"></i> Messages can be deleted within 5 minutes of sending.</p>
             {% for msg in my_messages %}
-            <div class="msg-box d-flex flex-column flex-md-row justify-content-between align-items-start">
-                <div class="w-100 pe-0 pe-md-3 mb-3 mb-md-0">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="badge bg-secondary px-2 py-1 fs-6">To: {{ teachers[msg.teacher_id].subject }}</span>
-                        <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
-                    </div>
-                    <p class="msg-text">{{ msg.text }}</p>
+            <div class="msg-box d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+                <div class="w-100 pe-0 pe-md-3 mb-2 mb-md-0" style="min-width: 0;">
+                    <span class="badge bg-secondary mb-1">To: {{ teachers[msg.teacher_id].subject }}</span>
+                    <p class="msg-text fs-5">{{ msg.text }}</p>
+                    <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
                 </div>
                 {% if msg.can_delete %}
-                <div class="flex-shrink-0 msg-actions">
+                <div class="flex-shrink-0 w-100 w-md-auto mt-2 mt-md-0">
                     <form action="/student/delete_msg/{{ msg.id }}" method="POST" class="m-0">
-                        <button class="btn btn-sm btn-outline-danger fw-bold btn-mobile-full"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+                        <button class="btn btn-sm btn-outline-danger w-100 fw-bold"><i class="fa-solid fa-trash me-1"></i>Delete</button>
                     </form>
                 </div>
                 {% endif %}
             </div>
             {% else %}
-            <div class="text-center py-5 bg-white rounded-4 border"><i class="fa-regular fa-paper-plane fa-3x text-light mb-3"></i><p class="text-muted fs-5 m-0">You haven't sent any messages yet.</p></div>
+            <div class="text-center p-4"><p class="text-muted fs-5">You haven't sent any messages yet.</p></div>
             {% endfor %}
-            <script>setTimeout(() => { window.location.reload(); }, 30000);</script>
+            <script>setTimeout(() => { window.location.reload(); }, 60000);</script>
         </div>
     </div>
 </div>
 """)
 
 TEACHER_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 bg-white p-4 rounded-4 shadow-sm border-start border-4 border-success gap-3">
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 bg-white p-4 rounded shadow-sm border-start border-4 border-success gap-3">
     <div>
-        <h2 class="fw-bold mb-1 fs-3">Welcome, {{ teacher.username }}</h2>
-        <span class="badge bg-dark fs-6 px-3 py-2"><i class="fa-regular fa-calendar me-2"></i>Session: {{ active_day }}</span>
+        <h3 class="fw-bold mb-1">{{ teacher.username }}'s Dashboard</h3>
+        <span class="badge bg-dark fs-6"><i class="fa-regular fa-calendar me-1"></i> Session: {{ active_day }}</span>
     </div>
-    <form action="/new_day" method="POST" class="w-100 w-md-auto m-0" style="max-width: fit-content;">
-        <button type="submit" class="btn btn-success fw-bold shadow-sm w-100 px-4"><i class="fa-solid fa-broom me-2"></i>Start Clean Session</button>
+    <form action="/new_day" method="POST" class="m-0 w-100 w-md-auto">
+        <button type="submit" class="btn btn-success fw-bold w-100"><i class="fa-solid fa-broom me-2"></i>Start New Clean Session</button>
     </form>
 </div>
 
-<div class="card p-3 p-md-4 mb-4 shadow-sm border border-warning">
-    <h5 class="fw-bold text-warning mb-3"><i class="fa-solid fa-star me-2"></i>Pin Note to Legend Board</h5>
-    <form action="/teacher/post_legend" method="POST" class="d-flex flex-column flex-md-row gap-2" autocomplete="off">
-        <input type="text" name="text" class="form-control form-control-lg flex-grow-1" placeholder="Write a custom announcement or comment..." required>
-        <button type="submit" class="btn btn-warning fw-bold text-dark btn-lg shadow-sm text-nowrap"><i class="fa-solid fa-thumbtack me-2"></i>Pin Note</button>
+<div class="card p-3 mb-4 shadow-sm border border-warning">
+    <h5 class="fw-bold text-warning mb-3"><i class="fa-solid fa-star"></i> Post Note Directly to Legend Board</h5>
+    <form action="/teacher/post_legend" method="POST" class="d-flex flex-column flex-md-row gap-2 align-items-md-center" autocomplete="off">
+        <input type="text" name="text" class="form-control" placeholder="Write a custom announcement or comment..." required>
+        <button type="submit" class="btn btn-warning fw-bold text-dark text-nowrap w-100 w-md-auto"><i class="fa-solid fa-thumbtack me-1"></i> Pin Note</button>
     </form>
 </div>
 
-<ul class="nav nav-tabs mb-4 border-0 flex-nowrap overflow-auto hide-scrollbar" id="teacherTabs" role="tablist">
-  <li class="nav-item"><button class="nav-link active fw-bold fs-5 btn text-nowrap me-2" data-bs-toggle="tab" data-bs-target="#current">Current Session</button></li>
-  <li class="nav-item"><button class="nav-link fw-bold fs-5 btn text-nowrap" data-bs-toggle="tab" data-bs-target="#history">Message History</button></li>
+<ul class="nav nav-tabs mb-4" id="teacherTabs" role="tablist">
+  <li class="nav-item"><button class="nav-link active fw-bold fs-5 text-nowrap" data-bs-toggle="tab" data-bs-target="#current">Current Session</button></li>
+  <li class="nav-item"><button class="nav-link fw-bold fs-5 text-nowrap" data-bs-toggle="tab" data-bs-target="#history">Message History</button></li>
 </ul>
 
 <div class="tab-content">
     <div class="tab-pane fade show active" id="current">
         {% for msg in messages %}
-        <div class="msg-box {% if msg.is_top %}msg-top{% endif %} d-flex flex-column flex-md-row justify-content-between align-items-start shadow-sm border-0">
-            <div class="w-100 pe-0 pe-md-4 mb-3 mb-md-0">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    {% set c_name = classes[msg.class_id].name if msg.class_id in classes else "Teacher Note" %}
-                    <span class="badge bg-primary px-2 py-1 fs-6">{{ c_name }}</span>
-                    <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
-                </div>
-                <p class="msg-text">{{ msg.text }}</p>
+        <div class="msg-box {% if msg.is_top %}msg-top{% endif %} d-flex flex-column flex-md-row justify-content-between align-items-md-center shadow-sm">
+            <div class="w-100 pe-0 pe-md-3 mb-3 mb-md-0" style="min-width: 0;">
+                {% set c_name = classes[msg.class_id].name if msg.class_id in classes else "Teacher Note" %}
+                <span class="badge bg-primary mb-2">{{ c_name }}</span>
+                <p class="msg-text fs-5 text-dark">{{ msg.text }}</p>
+                <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
             </div>
-            <div class="d-flex flex-row flex-md-column gap-2 flex-shrink-0 msg-actions">
+            <div class="d-flex flex-row flex-md-column gap-2 flex-shrink-0 w-100 w-md-auto mt-2 mt-md-0">
                 {% if not msg.is_top %}
-                <form action="/action/top/{{ msg.id }}" method="POST" class="m-0 flex-fill"><button class="btn btn-sm btn-warning w-100 fw-bold shadow-sm">Pin</button></form>
-                {% else %}<div class="badge bg-warning text-dark p-2 text-center flex-fill fs-6 shadow-sm"><i class="fa-solid fa-star me-1"></i> Pinned</div>{% endif %}
-                <form action="/action/delete/{{ msg.id }}" method="POST" class="m-0 flex-fill"><button class="btn btn-sm btn-outline-danger w-100 fw-bold bg-white">Delete</button></form>
+                <form action="/action/top/{{ msg.id }}" method="POST" class="m-0 flex-fill"><button class="btn btn-sm btn-warning w-100 fw-bold">Pin</button></form>
+                {% else %}<span class="badge bg-warning text-dark p-2 text-center flex-fill d-flex align-items-center justify-content-center"><i class="fa-solid fa-star me-1"></i> Pinned</span>{% endif %}
+                <form action="/action/delete/{{ msg.id }}" method="POST" class="m-0 flex-fill"><button class="btn btn-sm btn-danger w-100 fw-bold">Delete</button></form>
             </div>
         </div>
         {% else %}
-        <div class="text-center py-5 bg-white rounded-4 shadow-sm border"><i class="fa-regular fa-comments fa-3x text-light mb-3"></i><h4 class="text-muted m-0">No messages in this session.</h4></div>
+        <div class="text-center p-5 bg-white rounded shadow-sm"><i class="fa-regular fa-comments fa-3x text-muted mb-3"></i><h4>No messages in this session.</h4></div>
         {% endfor %}
     </div>
     
     <div class="tab-pane fade" id="history">
-        <div class="alert alert-info border-0 shadow-sm fw-bold"><i class="fa-solid fa-circle-info me-2"></i>This tab shows all messages sent to you across every session.</div>
+        <div class="alert alert-info border-0 shadow-sm"><i class="fa-solid fa-circle-info me-2"></i>This tab shows every message sent to you by students across all your sessions.</div>
         {% for msg in all_messages %}
-        <div class="msg-box d-flex flex-column flex-md-row justify-content-between align-items-start bg-light border-secondary">
-            <div class="w-100 pe-0 pe-md-4 mb-3 mb-md-0">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    {% set c_name = classes[msg.class_id].name if msg.class_id in classes else "Teacher Note" %}
-                    <span class="badge bg-secondary px-2 py-1">{{ c_name }} | {{ msg.day_id }}</span>
-                    <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
-                </div>
-                <p class="msg-text">{{ msg.text }}</p>
+        <div class="msg-box d-flex flex-column flex-md-row justify-content-between align-items-md-center bg-light border-secondary">
+            <div class="w-100 pe-0 pe-md-3 mb-2 mb-md-0" style="min-width: 0;">
+                {% set c_name = classes[msg.class_id].name if msg.class_id in classes else "Teacher Note" %}
+                <span class="badge bg-secondary mb-2">{{ c_name }} | Session: {{ msg.day_id }}</span>
+                <p class="msg-text fs-5 text-dark">{{ msg.text }}</p>
+                <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
             </div>
-            <div class="flex-shrink-0 msg-actions">
-                <form action="/action/delete/{{ msg.id }}" method="POST" class="m-0"><button class="btn btn-sm btn-outline-danger fw-bold w-100 bg-white">Delete</button></form>
+            <div class="flex-shrink-0 w-100 w-md-auto mt-2 mt-md-0">
+                <form action="/action/delete/{{ msg.id }}" method="POST" class="m-0 w-100"><button class="btn btn-sm btn-outline-danger fw-bold w-100">Delete</button></form>
             </div>
         </div>
         {% else %}
-        <div class="text-center py-5 bg-white rounded-4 shadow-sm border"><h4 class="text-muted m-0">No message history found.</h4></div>
+        <div class="text-center p-5 bg-white rounded shadow-sm"><h4>No message history found.</h4></div>
         {% endfor %}
     </div>
 </div>
 """)
 
 LEGEND_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3 px-2">
-    <h2 class="fw-bold text-dark m-0 fs-2"><i class="fa-solid fa-trophy text-warning me-3"></i>Legend Board</h2>
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+    <h2 class="fw-bold text-dark m-0"><i class="fa-solid fa-trophy text-warning me-2"></i>Legend Board</h2>
     {% if session.get('teacher_id') %}
     <form action="/clear_legend" method="POST" class="m-0 w-100 w-md-auto" onsubmit="return confirm('Remove ALL pinned messages from the Legend Board?');">
-        <button class="btn btn-danger w-100 fw-bold shadow-sm px-4"><i class="fa-solid fa-eraser me-2"></i>Clear Board</button>
+        <button class="btn btn-danger w-100 fw-bold shadow-sm"><i class="fa-solid fa-eraser me-2"></i>Clear Board</button>
     </form>
     {% endif %}
 </div>
-<div class="row px-2">
+<div class="row">
     {% for msg in messages %}
-    <div class="col-md-6 col-lg-4 mb-4">
-        <div class="card h-100 border-top border-4 border-warning shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-3 border-0">
-                <span class="fw-bold text-dark fs-5">{{ schools[msg.school_id].name }}</span>
-                <span class="badge bg-warning text-dark px-2 py-1 fs-6">{{ teachers[msg.teacher_id].subject }}</span>
+    <div class="col-md-6 mb-4">
+        <div class="card h-100 border-top border-4 border-warning shadow-sm" style="overflow-wrap: break-word;">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold">{{ schools[msg.school_id].name }}</span>
+                <span class="badge bg-warning text-dark">{{ teachers[msg.teacher_id].subject }}</span>
             </div>
-            <div class="card-body bg-light rounded-bottom-4 d-flex flex-column">
-                {% set c_name = classes[msg.class_id].name if msg.class_id in classes else "Teacher's Note" %}
-                <span class="badge bg-primary align-self-start mb-3 px-2 py-1">{{ c_name }}</span>
-                <p class="fs-4 fw-bold text-dark msg-text flex-grow-1" style="line-height: 1.4;">"{{ msg.text }}"</p>
-                <div class="text-end mt-3 border-top pt-2">
-                    <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
-                </div>
+            <div class="card-body bg-light">
+                {% set c_name = classes[msg.class_id].name if msg.class_id in classes else "Teacher's Pinned Note" %}
+                <span class="badge bg-primary mb-2">{{ c_name }}</span>
+                <p class="fs-4 fw-bold mt-2 text-dark msg-text">"{{ msg.text }}"</p>
+                <small class="text-muted fw-bold local-time float-end" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
             </div>
         </div>
     </div>
-    {% else %}<div class="col-12 text-center py-5 bg-white rounded-4 shadow-sm border"><p class="fs-4 text-muted m-0"><i class="fa-regular fa-star mb-3 d-block fa-2x"></i>No top comments pinned yet.</p></div>{% endfor %}
+    {% else %}<div class="col-12 text-center p-4 bg-white rounded shadow-sm"><p class="fs-5 text-muted m-0">No top comments pinned yet.</p></div>{% endfor %}
 </div>
 """)
 
@@ -728,6 +648,7 @@ def teacher_login():
 
 @app.route('/teacher_register', methods=['POST'])
 def teacher_register():
+    load_data(force=True)
     s_id = request.form['school_id']
     subj = request.form['subject'].strip()
     if any(t['school_id'] == s_id and t['subject'].lower() == subj.lower() for t in db["teachers"].values()):
@@ -761,6 +682,7 @@ def admin_dashboard():
 @app.route('/admin/add_class', methods=['POST'])
 def admin_add_class():
     if not session.get('is_admin'): return redirect(url_for('index'))
+    load_data(force=True)
     c_id = str(uuid.uuid4())[:8]
     db["classes"][c_id] = {"school_id": session.get('school_id'), "name": request.form['class_name'], "password_hash": generate_password_hash(request.form['class_password'])}
     save_classes()
@@ -769,6 +691,7 @@ def admin_add_class():
 
 @app.route('/admin/change_class_pw/<c_id>', methods=['POST'])
 def admin_change_class_pw(c_id):
+    load_data(force=True)
     if session.get('is_admin') and c_id in db["classes"] and db["classes"][c_id]["school_id"] == session.get('school_id'):
         db["classes"][c_id]["password_hash"] = generate_password_hash(request.form['new_password'])
         save_classes()
@@ -777,6 +700,7 @@ def admin_change_class_pw(c_id):
 
 @app.route('/admin/delete_class/<c_id>', methods=['POST'])
 def admin_delete_class(c_id):
+    load_data(force=True)
     if session.get('is_admin') and c_id in db["classes"] and db["classes"][c_id]["school_id"] == session.get('school_id'):
         del db["classes"][c_id]
         db["messages"] = [m for m in db["messages"] if m["class_id"] != c_id] 
@@ -787,7 +711,9 @@ def admin_delete_class(c_id):
 
 @app.route('/admin/action_teacher/<t_id>/<action>', methods=['POST'])
 def admin_action_teacher(t_id, action):
-    if not session.get('is_admin') or t_id not in db["teachers"]: return redirect(url_for('admin_dashboard'))
+    if not session.get('is_admin'): return redirect(url_for('admin_dashboard'))
+    load_data(force=True)
+    if t_id not in db["teachers"]: return redirect(url_for('admin_dashboard'))
     
     if db["teachers"][t_id]["school_id"] == session.get('school_id'):
         if action == "approve": 
@@ -809,6 +735,7 @@ def admin_action_teacher(t_id, action):
 @app.route('/admin/change_password', methods=['POST'])
 def admin_change_pw():
     if session.get('is_admin'):
+        load_data(force=True)
         db["teachers"][session['teacher_id']]["password_hash"] = generate_password_hash(request.form['new_password'])
         save_teachers()
         flash("Admin Password successfully updated.", "success")
@@ -817,6 +744,7 @@ def admin_change_pw():
 @app.route('/admin/resign', methods=['POST'])
 def admin_resign():
     if session.get('is_admin'):
+        load_data(force=True)
         s_id = session.get('school_id')
         admins = [t for t in db["teachers"].values() if t["school_id"] == s_id and t["is_admin"]]
         if len(admins) > 1:
@@ -832,6 +760,7 @@ def admin_resign():
 @app.route('/admin/delete_school', methods=['POST'])
 def admin_delete_school():
     if not session.get('is_admin'): return redirect(url_for('index'))
+    load_data(force=True)
     s_id = session.get('school_id')
     school_name = db["schools"][s_id]["name"]
     expected_text = f"confirm delete {school_name}"
@@ -880,7 +809,9 @@ def student_portal():
     my_msgs = []
     for m in db["messages"]:
         if m.get('student_id') == session.get('student_session_id'):
-            time_diff = (datetime.utcnow() - datetime.fromisoformat(m['iso_time'])).total_seconds()
+            # Strip "Z" manually for python 3.9- compatibility when parsing back
+            clean_iso = m['iso_time'].replace("Z", "")
+            time_diff = (datetime.utcnow() - datetime.fromisoformat(clean_iso)).total_seconds()
             m_copy = m.copy()
             m_copy['can_delete'] = time_diff <= 300 
             my_msgs.append(m_copy)
@@ -895,18 +826,18 @@ def send_message():
     t_id = request.form['teacher_id']
     if not s_id: return redirect(url_for('student_auth'))
     
-    # Absolute UTC Time logged via Python
+    # Absolute UTC Time configured perfectly. "Z" ensures browser Javascript converts it to exact Indian Time (IST)
     now = datetime.utcnow()
-    python_timestamp = now.strftime("%b %d, %Y - %I:%M %p UTC")
+    iso_string = now.isoformat() + "Z"
     
     msg = {
         "id": str(uuid.uuid4())[:8], "school_id": s_id, "class_id": c_id, "teacher_id": t_id,
         "student_id": session.get('student_session_id'), "text": request.form['text'], "is_top": False,
-        "day_id": db["active_days"].get(t_id, "Day-1"), "timestamp": python_timestamp, "iso_time": now.isoformat()
+        "day_id": db["active_days"].get(t_id, "Day-1"), "timestamp": now.strftime("%I:%M %p"), "iso_time": iso_string
     }
-    
     db["messages"].append(msg)
-    # ATOMIC APPEND: Instantly adds to sheet without overriding concurrent users
+    
+    # ATOMIC APPEND: Instantly drops into the next row. Prevents all simultaneous user overwriting bugs.
     append_sheet_row('Messages', [msg['id'], msg['school_id'], msg['class_id'], msg['teacher_id'], msg['student_id'], msg['text'], str(msg['is_top']), msg['day_id'], msg['timestamp'], msg['iso_time']])
     
     flash("Message sent! You have 5 minutes to delete it if needed.", "success")
@@ -915,9 +846,12 @@ def send_message():
 @app.route('/student/delete_msg/<m_id>', methods=['POST'])
 def student_delete_msg(m_id):
     s_ses = session.get('student_session_id')
+    load_data(force=True) # Forces sheet pull to prevent wiping out other students' simultaneous messages
+    
     for m in db["messages"]:
         if m['id'] == m_id and m.get('student_id') == s_ses:
-            if (datetime.utcnow() - datetime.fromisoformat(m['iso_time'])).total_seconds() <= 300:
+            clean_iso = m['iso_time'].replace("Z", "")
+            if (datetime.utcnow() - datetime.fromisoformat(clean_iso)).total_seconds() <= 300:
                 db["messages"].remove(m)
                 save_messages()
                 flash("Message successfully deleted.", "success")
@@ -945,6 +879,7 @@ def teacher_dashboard():
 @app.route('/new_day', methods=['POST'])
 def new_day():
     if session.get('teacher_id'):
+        load_data(force=True)
         db["active_days"][session['teacher_id']] = "Session-" + datetime.utcnow().strftime("%b%d-%H%M")
         save_teachers()
         flash("Started a brand new session!", "success")
@@ -956,15 +891,14 @@ def teacher_post_legend():
     if not tid: return redirect(url_for('teacher_login'))
     
     now = datetime.utcnow()
-    python_timestamp = now.strftime("%b %d, %Y - %I:%M %p UTC")
+    iso_string = now.isoformat() + "Z"
     
     msg = {
         "id": str(uuid.uuid4())[:8], "school_id": db["teachers"][tid]["school_id"], 
         "class_id": "TEACHER_NOTE", "teacher_id": tid, "student_id": "TEACHER", 
         "text": request.form['text'], "is_top": True, "day_id": "Legend", 
-        "timestamp": python_timestamp, "iso_time": now.isoformat()
+        "timestamp": now.strftime("%I:%M %p"), "iso_time": iso_string
     }
-    
     db["messages"].append(msg)
     append_sheet_row('Messages', [msg['id'], msg['school_id'], msg['class_id'], msg['teacher_id'], msg['student_id'], msg['text'], str(msg['is_top']), msg['day_id'], msg['timestamp'], msg['iso_time']])
     
@@ -975,6 +909,8 @@ def teacher_post_legend():
 def message_action(action_type, msg_id):
     tid = session.get('teacher_id')
     if not tid: return redirect(url_for('teacher_login'))
+    
+    load_data(force=True) # Forces sheet pull to prevent overwriting new messages
     for msg in db["messages"]:
         if msg['id'] == msg_id and msg['teacher_id'] == tid:
             if action_type == 'top': 
@@ -992,6 +928,7 @@ def clear_legend():
     if not session.get('teacher_id'): return redirect(url_for('index'))
     s_id = session.get('school_id')
     
+    load_data(force=True)
     for m in db["messages"]:
         if m['school_id'] == s_id and m['is_top']:
             m['is_top'] = False 
