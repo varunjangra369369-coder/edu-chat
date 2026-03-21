@@ -156,11 +156,28 @@ BASE_HTML = """
         .card { border: none; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); background: white; }
         .form-control, .form-select { border-radius: 8px; padding: 0.75rem 1rem; }
         .btn { border-radius: 8px; font-weight: 600; padding: 0.6rem 1.2rem; }
-        .msg-box { background: white; padding: 1rem; border-radius: 8px; border-left: 5px solid var(--primary); margin-bottom: 1rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        
+        /* Message Box Enhancements for Mobile Overflow */
+        .msg-box { background: white; padding: 1rem; border-radius: 8px; border-left: 5px solid var(--primary); margin-bottom: 1rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; }
+        .msg-box .w-100 { min-width: 0; }
+        .msg-text { white-space: pre-wrap; margin-bottom: 0.5rem; word-break: break-word; }
         .msg-top { border-left: 5px solid #f59e0b; background: #fffbeb; }
+        
         .nav-tabs .nav-link { font-weight: 600; color: #64748b; }
         .nav-tabs .nav-link.active { color: var(--primary); border-bottom: 3px solid var(--primary); }
     </style>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Converts ISO UTC timestamps directly to the user's local timezone
+            document.querySelectorAll('.local-time').forEach(el => {
+                let iso = el.getAttribute('data-iso');
+                if(iso) {
+                    let date = new Date(iso);
+                    el.innerText = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                }
+            });
+        });
+    </script>
 </head>
 <body>
     <div class="container">
@@ -250,18 +267,21 @@ TEACHER_LOGIN_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
         <button type="submit" class="btn btn-success w-100 btn-lg">Login</button>
     </form>
     
-    <div class="mt-4 pt-3 border-top text-center">
-        <button class="btn btn-outline-primary w-100" onclick="document.getElementById('regForm').style.display='block'; this.style.display='none';">Register as New Teacher</button>
+    <div class="mt-4 pt-4 border-top text-center" id="regToggleContainer">
+        <button class="btn btn-outline-primary w-100 fw-bold shadow-sm" onclick="document.getElementById('regForm').style.display='block'; this.parentNode.style.display='none';">Register as New Teacher</button>
     </div>
     
-    <form action="/teacher_register" method="POST" id="regForm" style="display:none;" class="mt-3 bg-light p-3 rounded" autocomplete="off">
-        <h5 class="fw-bold mb-3">Teacher Registration</h5>
-        <p class="small text-muted mb-2"><i class="fa-solid fa-circle-info"></i> Requires Admin approval to log in.</p>
-        <div class="mb-2"><select name="school_id" class="form-select" required>{% for s_id, s_info in schools.items() %}<option value="{{ s_id }}">{{ s_info.name }}</option>{% endfor %}</select></div>
-        <div class="mb-2"><input type="text" name="username" class="form-control" placeholder="Username" autocomplete="off" required></div>
-        <div class="mb-2"><input type="text" name="subject" class="form-control" placeholder="Subject" required></div>
-        <div class="mb-3"><input type="password" name="password" class="form-control" placeholder="Password" required minlength="6" autocomplete="new-password"></div>
-        <button type="submit" class="btn btn-primary w-100">Submit for Approval</button>
+    <form action="/teacher_register" method="POST" id="regForm" style="display:none;" class="mt-4 bg-light border border-primary p-4 rounded shadow-sm" autocomplete="off">
+        <h5 class="fw-bold mb-3 text-primary"><i class="fa-solid fa-user-plus me-2"></i>Teacher Registration</h5>
+        <div class="alert alert-info py-2 small mb-3"><i class="fa-solid fa-circle-info me-1"></i> Requires Admin approval to log in.</div>
+        <div class="mb-3"><label class="form-label small fw-bold">Select School</label>
+            <select name="school_id" class="form-select" required>{% for s_id, s_info in schools.items() %}<option value="{{ s_id }}">{{ s_info.name }}</option>{% endfor %}</select>
+        </div>
+        <div class="mb-3"><label class="form-label small fw-bold">Username</label><input type="text" name="username" class="form-control" placeholder="e.g. Mr. Smith" autocomplete="off" required></div>
+        <div class="mb-3"><label class="form-label small fw-bold">Subject</label><input type="text" name="subject" class="form-control" placeholder="e.g. Math" required></div>
+        <div class="mb-4"><label class="form-label small fw-bold">Password</label><input type="password" name="password" class="form-control" placeholder="Min 6 characters" required minlength="6" autocomplete="new-password"></div>
+        <button type="submit" class="btn btn-primary w-100 fw-bold mb-2">Submit for Approval</button>
+        <button type="button" class="btn btn-secondary w-100 fw-bold" onclick="document.getElementById('regForm').style.display='none'; document.getElementById('regToggleContainer').style.display='block';">Cancel</button>
     </form>
 </div></div></div>
 """)
@@ -318,11 +338,11 @@ ADMIN_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
                 <div class="card p-4 border-top border-4 border-warning shadow-sm">
                     <h5 class="fw-bold mb-3 text-warning">Pending Approvals</h5>
                     {% for t_id, t_info in pending_teachers.items() %}
-                    <div class="d-flex justify-content-between align-items-center p-3 border rounded mb-2 bg-white">
-                        <span><b class="fs-5">{{ t_info.username }}</b> ({{ t_info.subject }})</span>
-                        <div class="d-flex gap-2">
-                            <form action="/admin/action_teacher/{{ t_id }}/approve" method="POST" class="m-0"><button class="btn btn-success btn-sm fw-bold">Approve</button></form>
-                            <form action="/admin/action_teacher/{{ t_id }}/reject" method="POST" class="m-0"><button class="btn btn-danger btn-sm fw-bold">Reject</button></form>
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center p-3 border rounded mb-2 bg-white">
+                        <span class="mb-2 mb-md-0"><b class="fs-5">{{ t_info.username }}</b> ({{ t_info.subject }})</span>
+                        <div class="d-flex gap-2 w-100 w-md-auto">
+                            <form action="/admin/action_teacher/{{ t_id }}/approve" method="POST" class="m-0 flex-grow-1"><button class="btn btn-success btn-sm w-100 fw-bold">Approve</button></form>
+                            <form action="/admin/action_teacher/{{ t_id }}/reject" method="POST" class="m-0 flex-grow-1"><button class="btn btn-danger btn-sm w-100 fw-bold">Reject</button></form>
                         </div>
                     </div>
                     {% else %}<p class="text-muted m-0">No pending requests.</p>{% endfor %}
@@ -342,12 +362,14 @@ ADMIN_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
                                 <td>{% if t_info.is_admin %}<span class="badge bg-dark">Admin</span>{% else %}<span class="badge bg-secondary">Teacher</span>{% endif %}</td>
                                 <td>
                                     {% if t_id != session['teacher_id'] %}
-                                        <form action="/admin/action_teacher/{{ t_id }}/toggle_admin" method="POST" class="d-inline m-0">
-                                            <button class="btn btn-sm {% if t_info.is_admin %}btn-warning{% else %}btn-dark{% endif %}">{% if t_info.is_admin %}Revoke Admin{% else %}Make Admin{% endif %}</button>
+                                        <div class="d-flex gap-1 flex-wrap">
+                                        <form action="/admin/action_teacher/{{ t_id }}/toggle_admin" method="POST" class="m-0">
+                                            <button class="btn btn-sm {% if t_info.is_admin %}btn-warning{% else %}btn-dark{% endif %} text-nowrap">{% if t_info.is_admin %}Revoke Admin{% else %}Make Admin{% endif %}</button>
                                         </form>
-                                        <form action="/admin/action_teacher/{{ t_id }}/remove" method="POST" class="d-inline m-0" onsubmit="return confirm('Remove this teacher?');">
+                                        <form action="/admin/action_teacher/{{ t_id }}/remove" method="POST" class="m-0" onsubmit="return confirm('Remove this teacher?');">
                                             <button class="btn btn-sm btn-danger"><i class="fa-solid fa-user-xmark"></i></button>
                                         </form>
+                                        </div>
                                     {% else %}
                                         <span class="text-muted small fw-bold">You (Current User)</span>
                                     {% endif %}
@@ -418,7 +440,7 @@ STUDENT_AUTH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
 STUDENT_PORTAL_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
 <div class="row">
     <div class="col-lg-5 mb-4">
-        <div class="card p-4 shadow-sm border-top border-4 border-primary sticky-top" style="top: 20px;">
+        <div class="card p-4 shadow-sm border-top border-4 border-primary sticky-lg-top" style="top: 20px;">
             <h4 class="fw-bold mb-3"><i class="fa-solid fa-paper-plane text-primary me-2"></i>Send Message</h4>
             <form action="/send_message" method="POST">
                 <select name="teacher_id" class="form-select mb-3" required>
@@ -426,7 +448,7 @@ STUDENT_PORTAL_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
                     {% for t_id, t_info in teachers.items() %}<option value="{{ t_id }}">{{ t_info.subject }} ({{ t_info.username }})</option>{% endfor %}
                 </select>
                 <textarea name="text" class="form-control mb-3" rows="4" required placeholder="Type your question here..."></textarea>
-                <button type="submit" class="btn btn-primary w-100 fw-bold">Send</button>
+                <button type="submit" class="btn btn-primary w-100 fw-bold">Send Message</button>
             </form>
         </div>
     </div>
@@ -435,16 +457,18 @@ STUDENT_PORTAL_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
             <h4 class="fw-bold mb-3"><i class="fa-solid fa-clock-rotate-left text-secondary me-2"></i>My Recent Messages</h4>
             <p class="small text-muted mb-4"><i class="fa-solid fa-circle-info"></i> Messages can be deleted within 5 minutes of sending.</p>
             {% for msg in my_messages %}
-            <div class="msg-box d-flex justify-content-between align-items-center">
-                <div class="w-100 pe-3">
+            <div class="msg-box d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+                <div class="w-100 pe-0 pe-md-3 mb-2 mb-md-0" style="min-width: 0;">
                     <span class="badge bg-secondary mb-1">To: {{ teachers[msg.teacher_id].subject }}</span>
-                    <p class="mb-1 text-dark fs-5">{{ msg.text }}</p>
-                    <small class="text-muted fw-bold">{{ msg.timestamp }}</small>
+                    <p class="msg-text fs-5 text-dark">{{ msg.text }}</p>
+                    <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
                 </div>
                 {% if msg.can_delete %}
-                <form action="/student/delete_msg/{{ msg.id }}" method="POST" class="m-0 flex-shrink-0">
-                    <button class="btn btn-sm btn-outline-danger fw-bold"><i class="fa-solid fa-trash me-1"></i>Delete</button>
-                </form>
+                <div class="flex-shrink-0 w-100 w-md-auto mt-2 mt-md-0">
+                    <form action="/student/delete_msg/{{ msg.id }}" method="POST" class="m-0 w-100">
+                        <button class="btn btn-sm btn-outline-danger fw-bold w-100"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+                    </form>
+                </div>
                 {% endif %}
             </div>
             {% else %}
@@ -462,14 +486,14 @@ TEACHER_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
         <h3 class="fw-bold mb-1">{{ teacher.username }}'s Dashboard</h3>
         <span class="badge bg-dark fs-6"><i class="fa-regular fa-calendar me-1"></i> Session: {{ active_day }}</span>
     </div>
-    <form action="/new_day" method="POST" class="mt-3 mt-md-0">
-        <button type="submit" class="btn btn-success fw-bold"><i class="fa-solid fa-broom me-2"></i>Start New Clean Session</button>
+    <form action="/new_day" method="POST" class="mt-3 mt-md-0 w-100" style="max-width: fit-content;">
+        <button type="submit" class="btn btn-success fw-bold w-100"><i class="fa-solid fa-broom me-2"></i>Start New Clean Session</button>
     </form>
 </div>
 
 <div class="card p-3 mb-4 shadow-sm border border-warning">
     <h5 class="fw-bold text-warning mb-3"><i class="fa-solid fa-star"></i> Post Note Directly to Legend Board</h5>
-    <form action="/teacher/post_legend" method="POST" class="d-flex gap-2 align-items-center" autocomplete="off">
+    <form action="/teacher/post_legend" method="POST" class="d-flex flex-column flex-md-row gap-2 align-items-md-center" autocomplete="off">
         <input type="text" name="text" class="form-control" placeholder="Write a custom announcement or comment..." required>
         <button type="submit" class="btn btn-warning fw-bold text-dark text-nowrap"><i class="fa-solid fa-thumbtack me-1"></i> Pin Note</button>
     </form>
@@ -483,18 +507,18 @@ TEACHER_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
 <div class="tab-content">
     <div class="tab-pane fade show active" id="current">
         {% for msg in messages %}
-        <div class="msg-box {% if msg.is_top %}msg-top{% endif %} d-flex justify-content-between align-items-center shadow-sm">
-            <div class="w-100 pe-3">
+        <div class="msg-box {% if msg.is_top %}msg-top{% endif %} d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center shadow-sm">
+            <div class="w-100 pe-0 pe-md-3 mb-3 mb-md-0" style="min-width: 0;">
                 {% set c_name = classes[msg.class_id].name if msg.class_id in classes else "Teacher Note" %}
                 <span class="badge bg-primary mb-2">{{ c_name }}</span>
-                <p class="mb-2 fs-5 text-dark">{{ msg.text }}</p>
-                <small class="text-muted fw-bold">{{ msg.timestamp }}</small>
+                <p class="msg-text fs-5 text-dark">{{ msg.text }}</p>
+                <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
             </div>
-            <div class="d-flex flex-column gap-2 flex-shrink-0">
+            <div class="d-flex flex-row flex-md-column gap-2 flex-shrink-0 w-100 w-md-auto mt-2 mt-md-0" style="max-width: 100%;">
                 {% if not msg.is_top %}
-                <form action="/action/top/{{ msg.id }}" method="POST" class="m-0"><button class="btn btn-sm btn-warning w-100 fw-bold">Pin</button></form>
-                {% else %}<span class="badge bg-warning text-dark p-2 text-center w-100"><i class="fa-solid fa-star"></i> Pinned</span>{% endif %}
-                <form action="/action/delete/{{ msg.id }}" method="POST" class="m-0"><button class="btn btn-sm btn-danger w-100 fw-bold">Delete</button></form>
+                <form action="/action/top/{{ msg.id }}" method="POST" class="m-0 flex-grow-1"><button class="btn btn-sm btn-warning w-100 fw-bold">Pin</button></form>
+                {% else %}<span class="badge bg-warning text-dark p-2 text-center w-100 flex-grow-1"><i class="fa-solid fa-star"></i> Pinned</span>{% endif %}
+                <form action="/action/delete/{{ msg.id }}" method="POST" class="m-0 flex-grow-1"><button class="btn btn-sm btn-danger w-100 fw-bold">Delete</button></form>
             </div>
         </div>
         {% else %}
@@ -505,15 +529,15 @@ TEACHER_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
     <div class="tab-pane fade" id="history">
         <div class="alert alert-info border-0 shadow-sm"><i class="fa-solid fa-circle-info me-2"></i>This tab shows every message sent to you by students across all your sessions.</div>
         {% for msg in all_messages %}
-        <div class="msg-box d-flex justify-content-between align-items-center bg-light border-secondary">
-            <div class="w-100 pe-3">
+        <div class="msg-box d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center bg-light border-secondary">
+            <div class="w-100 pe-0 pe-md-3 mb-2 mb-md-0" style="min-width: 0;">
                 {% set c_name = classes[msg.class_id].name if msg.class_id in classes else "Teacher Note" %}
                 <span class="badge bg-secondary mb-2">{{ c_name }} | Session: {{ msg.day_id }}</span>
-                <p class="mb-2 fs-5 text-dark">{{ msg.text }}</p>
-                <small class="text-muted fw-bold">{{ msg.timestamp }}</small>
+                <p class="msg-text fs-5 text-dark">{{ msg.text }}</p>
+                <small class="text-muted fw-bold local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
             </div>
-            <div class="flex-shrink-0">
-                <form action="/action/delete/{{ msg.id }}" method="POST" class="m-0"><button class="btn btn-sm btn-outline-danger fw-bold">Delete</button></form>
+            <div class="flex-shrink-0 w-100 w-md-auto mt-2 mt-md-0">
+                <form action="/action/delete/{{ msg.id }}" method="POST" class="m-0 w-100"><button class="btn btn-sm btn-outline-danger fw-bold w-100">Delete</button></form>
             </div>
         </div>
         {% else %}
@@ -524,26 +548,27 @@ TEACHER_DASH_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
 """)
 
 LEGEND_HTML = BASE_HTML.replace('{% block content %}{% endblock %}', """
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold text-dark m-0"><i class="fa-solid fa-trophy text-warning me-2"></i>Legend Board</h2>
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
+    <h2 class="fw-bold text-dark m-0 mb-3 mb-md-0"><i class="fa-solid fa-trophy text-warning me-2"></i>Legend Board</h2>
     {% if session.get('teacher_id') %}
-    <form action="/clear_legend" method="POST" class="m-0" onsubmit="return confirm('Remove ALL pinned messages from the Legend Board?');">
-        <button class="btn btn-danger fw-bold shadow-sm"><i class="fa-solid fa-eraser me-2"></i>Clear Board</button>
+    <form action="/clear_legend" method="POST" class="m-0 w-100 w-md-auto" onsubmit="return confirm('Remove ALL pinned messages from the Legend Board?');">
+        <button class="btn btn-danger w-100 fw-bold shadow-sm"><i class="fa-solid fa-eraser me-2"></i>Clear Board</button>
     </form>
     {% endif %}
 </div>
 <div class="row">
     {% for msg in messages %}
     <div class="col-md-6 mb-4">
-        <div class="card h-100 border-top border-4 border-warning shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <div class="card h-100 border-top border-4 border-warning shadow-sm" style="overflow-wrap: break-word;">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span class="fw-bold">{{ schools[msg.school_id].name }}</span>
                 <span class="badge bg-warning text-dark">{{ teachers[msg.teacher_id].subject }}</span>
             </div>
             <div class="card-body bg-light">
                 {% set c_name = classes[msg.class_id].name if msg.class_id in classes else "Teacher's Pinned Note" %}
                 <span class="badge bg-primary mb-2">{{ c_name }}</span>
-                <p class="fs-4 fw-bold mt-2 text-dark">"{{ msg.text }}"</p>
+                <p class="fs-4 fw-bold mt-2 text-dark msg-text">"{{ msg.text }}"</p>
+                <small class="text-muted fw-bold float-end local-time" data-iso="{{ msg.iso_time }}">{{ msg.timestamp }}</small>
             </div>
         </div>
     </div>
@@ -560,6 +585,7 @@ def index():
 @app.route('/create_school', methods=['GET', 'POST'])
 def create_school():
     if request.method == 'POST':
+        load_data(force=True)  # Prevent concurrency overwrite
         s_name = request.form['school_name'].strip()
         if any(s['name'].lower() == s_name.lower() for s in db["schools"].values()):
             flash("School name already taken!", "danger")
@@ -601,6 +627,7 @@ def teacher_login():
 
 @app.route('/teacher_register', methods=['POST'])
 def teacher_register():
+    load_data(force=True)  # Prevent concurrency overwrite
     s_id = request.form['school_id']
     subj = request.form['subject'].strip()
     if any(t['school_id'] == s_id and t['subject'].lower() == subj.lower() for t in db["teachers"].values()):
@@ -634,6 +661,7 @@ def admin_dashboard():
 @app.route('/admin/add_class', methods=['POST'])
 def admin_add_class():
     if not session.get('is_admin'): return redirect(url_for('index'))
+    load_data(force=True)  # Prevent concurrency overwrite
     c_id = str(uuid.uuid4())[:8]
     db["classes"][c_id] = {"school_id": session.get('school_id'), "name": request.form['class_name'], "password_hash": generate_password_hash(request.form['class_password'])}
     save_classes()
@@ -642,6 +670,7 @@ def admin_add_class():
 
 @app.route('/admin/change_class_pw/<c_id>', methods=['POST'])
 def admin_change_class_pw(c_id):
+    load_data(force=True)  # Prevent concurrency overwrite
     if session.get('is_admin') and c_id in db["classes"] and db["classes"][c_id]["school_id"] == session.get('school_id'):
         db["classes"][c_id]["password_hash"] = generate_password_hash(request.form['new_password'])
         save_classes()
@@ -650,6 +679,7 @@ def admin_change_class_pw(c_id):
 
 @app.route('/admin/delete_class/<c_id>', methods=['POST'])
 def admin_delete_class(c_id):
+    load_data(force=True)  # Prevent concurrency overwrite
     if session.get('is_admin') and c_id in db["classes"] and db["classes"][c_id]["school_id"] == session.get('school_id'):
         del db["classes"][c_id]
         db["messages"] = [m for m in db["messages"] if m["class_id"] != c_id] 
@@ -660,7 +690,9 @@ def admin_delete_class(c_id):
 
 @app.route('/admin/action_teacher/<t_id>/<action>', methods=['POST'])
 def admin_action_teacher(t_id, action):
-    if not session.get('is_admin') or t_id not in db["teachers"]: return redirect(url_for('admin_dashboard'))
+    if not session.get('is_admin'): return redirect(url_for('admin_dashboard'))
+    load_data(force=True)  # Prevent concurrency overwrite
+    if t_id not in db["teachers"]: return redirect(url_for('admin_dashboard'))
     
     if db["teachers"][t_id]["school_id"] == session.get('school_id'):
         if action == "approve": 
@@ -682,6 +714,7 @@ def admin_action_teacher(t_id, action):
 @app.route('/admin/change_password', methods=['POST'])
 def admin_change_pw():
     if session.get('is_admin'):
+        load_data(force=True)
         db["teachers"][session['teacher_id']]["password_hash"] = generate_password_hash(request.form['new_password'])
         save_teachers()
         flash("Admin Password successfully updated.", "success")
@@ -690,6 +723,7 @@ def admin_change_pw():
 @app.route('/admin/resign', methods=['POST'])
 def admin_resign():
     if session.get('is_admin'):
+        load_data(force=True)
         s_id = session.get('school_id')
         admins = [t for t in db["teachers"].values() if t["school_id"] == s_id and t["is_admin"]]
         if len(admins) > 1:
@@ -705,6 +739,7 @@ def admin_resign():
 @app.route('/admin/delete_school', methods=['POST'])
 def admin_delete_school():
     if not session.get('is_admin'): return redirect(url_for('index'))
+    load_data(force=True)
     s_id = session.get('school_id')
     school_name = db["schools"][s_id]["name"]
     expected_text = f"confirm delete {school_name}"
@@ -753,7 +788,7 @@ def student_portal():
     my_msgs = []
     for m in db["messages"]:
         if m.get('student_id') == session.get('student_session_id'):
-            time_diff = (datetime.now() - datetime.fromisoformat(m['iso_time'])).total_seconds()
+            time_diff = (datetime.utcnow() - datetime.fromisoformat(m['iso_time'])).total_seconds()
             m_copy = m.copy()
             m_copy['can_delete'] = time_diff <= 300 
             my_msgs.append(m_copy)
@@ -768,23 +803,26 @@ def send_message():
     t_id = request.form['teacher_id']
     if not s_id: return redirect(url_for('student_auth'))
     
-    now = datetime.now()
+    load_data(force=True) # Fetch absolutely latest sheet data to prevent overwriting other users
+    
+    now = datetime.utcnow() # Standardize backend time to UTC
     msg = {
         "id": str(uuid.uuid4())[:8], "school_id": s_id, "class_id": c_id, "teacher_id": t_id,
         "student_id": session.get('student_session_id'), "text": request.form['text'], "is_top": False,
-        "day_id": db["active_days"].get(t_id, "Day-1"), "timestamp": now.strftime("%I:%M %p"), "iso_time": now.isoformat()
+        "day_id": db["active_days"].get(t_id, "Day-1"), "timestamp": now.strftime("%I:%M %p UTC"), "iso_time": now.isoformat()
     }
     db["messages"].append(msg)
-    save_messages()
+    save_messages() # Save everything back to the sheet seamlessly
     flash("Message sent! You have 5 minutes to delete it if needed.", "success")
     return redirect(url_for('student_portal'))
 
 @app.route('/student/delete_msg/<m_id>', methods=['POST'])
 def student_delete_msg(m_id):
     s_ses = session.get('student_session_id')
+    load_data(force=True) # Prevent concurrency overwrite
     for m in db["messages"]:
         if m['id'] == m_id and m.get('student_id') == s_ses:
-            if (datetime.now() - datetime.fromisoformat(m['iso_time'])).total_seconds() <= 300:
+            if (datetime.utcnow() - datetime.fromisoformat(m['iso_time'])).total_seconds() <= 300:
                 db["messages"].remove(m)
                 save_messages()
                 flash("Message successfully deleted.", "success")
@@ -812,7 +850,8 @@ def teacher_dashboard():
 @app.route('/new_day', methods=['POST'])
 def new_day():
     if session.get('teacher_id'):
-        db["active_days"][session['teacher_id']] = "Session-" + datetime.now().strftime("%b%d-%H%M")
+        load_data(force=True)
+        db["active_days"][session['teacher_id']] = "Session-" + datetime.utcnow().strftime("%b%d-%H%M")
         save_teachers()
         flash("Started a brand new session!", "success")
     return redirect(url_for('teacher_dashboard'))
@@ -822,12 +861,14 @@ def teacher_post_legend():
     tid = session.get('teacher_id')
     if not tid: return redirect(url_for('teacher_login'))
     
-    now = datetime.now()
+    load_data(force=True) # Prevent concurrency overwrite
+    
+    now = datetime.utcnow()
     msg = {
         "id": str(uuid.uuid4())[:8], "school_id": db["teachers"][tid]["school_id"], 
         "class_id": "TEACHER_NOTE", "teacher_id": tid, "student_id": "TEACHER", 
         "text": request.form['text'], "is_top": True, "day_id": "Legend", 
-        "timestamp": now.strftime("%I:%M %p"), "iso_time": now.isoformat()
+        "timestamp": now.strftime("%I:%M %p UTC"), "iso_time": now.isoformat()
     }
     db["messages"].append(msg)
     save_messages()
@@ -838,6 +879,8 @@ def teacher_post_legend():
 def message_action(action_type, msg_id):
     tid = session.get('teacher_id')
     if not tid: return redirect(url_for('teacher_login'))
+    
+    load_data(force=True) # Prevent concurrency overwrite
     for msg in db["messages"]:
         if msg['id'] == msg_id and msg['teacher_id'] == tid:
             if action_type == 'top': 
@@ -855,6 +898,7 @@ def clear_legend():
     if not session.get('teacher_id'): return redirect(url_for('index'))
     s_id = session.get('school_id')
     
+    load_data(force=True) # Prevent concurrency overwrite
     for m in db["messages"]:
         if m['school_id'] == s_id and m['is_top']:
             m['is_top'] = False 
